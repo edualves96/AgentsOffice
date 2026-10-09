@@ -9,6 +9,7 @@ Every live Claude Code terminal becomes a person in the office. You can tell at 
 - **One person per terminal.** Each person is labelled with the project folder and its current activity (the tool being run, a permission prompt, a question for you).
 - **Subagents.** Subagents spawned by a terminal appear as extra people next to their parent.
 - **Idle agents wander.** They go to the kitchen and vending machine, the library, the meeting table, the gym, the server racks and reception.
+- **Office staff.** Two cleaners mop the rooms and the break area all day, and two more join them when no terminal is open. Every hour a delivery guy comes in to swap the water cooler's gallon.
 - **Usage details.** Token counts, an estimated cost, a context-window gauge and the session's todo list. Cost is only shown for models that have a known price.
 - **Notifications.** A Windows toast and a taskbar flash when a terminal starts waiting for you. Notifications can be turned off in the app.
 

@@ -1097,6 +1097,7 @@ function frame(nowMs) {
     },
   }));
   drawables.push({ y: pet.y, fn: () => lifeDrawPet(nowMs) });
+  for (const st of staff) drawables.push({ y: st.y, fn: () => lifeDrawStaff(st, nowMs) });
   drawables.push({ y: POOL.y + 33, fn: () => drawPoolTable(nowMs, players.length >= 2) });
   drawables.push({ y: MEET.y + MEET.h, fn: () => placesDrawMeetingTable(nowMs) });
   drawables.sort((p, q) => p.y - q.y).forEach((d) => d.fn());

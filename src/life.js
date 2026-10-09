@@ -272,30 +272,37 @@ const pet = { name: 'Mochi', x: DOOR_X, y: 100, dir: 1, mode: 'sit', path: [], n
 const PET_SPOTS = [[470, 238], [430, 262], [340, 262]]; // clear of the gym, library and meeting table
 const COUCH_SPOT = [416, 93];
 
-function petZone() {
-  if (pet.x < ROOM_W - 2) {
-    const i = ROOMS.findIndex((rm) => pet.y >= rm.y && pet.y < rm.y + rm.h);
+// Which part of the office walker stands in (the pet and the staff share the same routes).
+function walkerZone(e) {
+  if (e.x < ROOM_W - 2) {
+    const i = ROOMS.findIndex((rm) => e.y >= rm.y && e.y < rm.y + rm.h);
     return { room: i >= 0 ? i : 0 };
   }
-  return pet.x >= 318 ? { hall: false, breakArea: true } : { hall: true };
+  return e.x >= 318 ? { hall: false, breakArea: true } : { hall: true };
 }
 
-function petRoute(tx, ty, targetRoom) {
-  const z = petZone();
+// Axis-aligned path from where `e` stands to (tx, ty), via the room aisles and the door.
+// targetRoom is the room index of the target, or -1 for the hall and break area.
+function walkerRoute(e, tx, ty, targetRoom) {
+  const z = walkerZone(e);
   const pts = [];
   if (z.room !== undefined && ROOMS[z.room]) {
     const ra = ROOMS[z.room].aisleY;
-    pts.push([pet.x, ra], [DOOR_X, ra]);
+    pts.push([e.x, ra], [DOOR_X, ra]);
   } else if (z.breakArea) {
-    pts.push([pet.x, AISLE_Y], [DOOR_X, AISLE_Y]);
+    pts.push([e.x, AISLE_Y], [DOOR_X, AISLE_Y]);
   }
-  if (targetRoom >= 0) {
+  if (targetRoom >= 0 && ROOMS[targetRoom]) {
     const ta = ROOMS[targetRoom].aisleY;
     pts.push([DOOR_X, ta], [tx, ta], [tx, ty]);
   } else {
     pts.push([DOOR_X, AISLE_Y], [tx, AISLE_Y], [tx, ty]);
   }
-  pet.path = pts;
+  return pts;
+}
+
+function petRoute(tx, ty, targetRoom) {
+  pet.path = walkerRoute(pet, tx, ty, targetRoom);
 }
 
 function petPlan() {
@@ -379,11 +386,172 @@ function lifeDrawPet(t) {
   }
 }
 
+// ---------- staff: cleaning crew and the water delivery guy ----------
+// Two cleaners work all day; when no terminal is open two more join them. Every full hour the water
+// guy comes in through the front door, swaps the gallon on the water cooler and leaves again.
+const CLEANERS_BUSY = 2;
+const CLEANERS_EMPTY = 4;
+const CLEANER_SPEED = 26;
+const WATER_SPEED = 38;
+const SWAP_MS = 4200;
+const CLEAN_SPOTS = [[470, 238], [430, 262], [340, 262], [350, 124], [420, 124]]; // break area, clear of the furniture
+const WATER_SPOT = [452, 100]; // in front of the water cooler
+const CLEAN_LINES = ['squeaky clean!', 'mind the wet floor', 'who spilled this?', 'crumbs everywhere...', 'almost done here'];
+const WATER_LINES = ['fresh water!', 'heavy one...', 'water delivery!'];
+const CLEANER_LOOKS = [
+  { skin: '#e0a97c', hair: '#2b2118', shirt: '#3cb8b2', pants: '#2f3b52', long: true, seed: 11 },
+  { skin: '#f2c9a0', hair: '#8a8a92', shirt: '#3cb8b2', pants: '#2f3b52', long: false, seed: 23 },
+  { skin: '#8d5a3b', hair: '#2b2118', shirt: '#3cb8b2', pants: '#2f3b52', long: true, seed: 37 },
+  { skin: '#c68a5b', hair: '#5a3a22', shirt: '#3cb8b2', pants: '#2f3b52', long: false, seed: 41 },
+];
+const WATER_LOOK = { skin: '#f7d9bd', hair: '#b03a2e', shirt: '#2f6fd9', pants: '#3b3b46', long: false, seed: 5 };
+
+const staff = [];
+let staffRooms = -1;
+let nextCleanerAt = 0;
+let waterHour = null;
+
+function officeEmpty() {
+  return sessionsLoaded && ![...agents.values()].some((a) => !a.leaving);
+}
+
+function addStaff(kind, slot, look, speed) {
+  const s = { kind, slot, look, speed, x: DOOR_X, y: DOOR_Y, dir: 1, mode: 'idle', path: [], next: null, until: 0, walking: false, leaving: false, gone: false, say: null, jug: null };
+  staff.push(s);
+  return s;
+}
+
+function staffGoto(s, tx, ty, targetRoom, next) {
+  s.path = walkerRoute(s, tx, ty, targetRoom);
+  s.next = next;
+}
+
+function staffLeave(s) {
+  s.leaving = true;
+  staffGoto(s, DOOR_X, DOOR_Y, -1, { mode: 'gone', dur: 0 });
+}
+
+function callWaterGuy() {
+  if (staff.some((s) => s.kind === 'water')) return;
+  const s = addStaff('water', 0, WATER_LOOK, WATER_SPEED);
+  s.jug = 'full';
+  staffGoto(s, WATER_SPOT[0], WATER_SPOT[1], -1, { mode: 'swap', dur: SWAP_MS });
+}
+
+function cleanerPlan(s) {
+  const dur = 5000 + Math.random() * 4000;
+  if (Math.random() < 0.65 && ROOMS.length) {
+    const i = Math.floor(Math.random() * ROOMS.length);
+    const d = DESKS[i * DESKS_PER_ROOM + Math.floor(Math.random() * DESKS_PER_ROOM)];
+    staffGoto(s, d.x + 24, ROOMS[i].aisleY, i, { mode: 'clean', dur });
+  } else {
+    const sp = CLEAN_SPOTS[Math.floor(Math.random() * CLEAN_SPOTS.length)];
+    staffGoto(s, sp[0], sp[1], -1, { mode: 'clean', dur });
+  }
+}
+
+// keep the crew at the right size: two cleaners, four when nobody is working
+function updateCrew(now) {
+  const want = officeEmpty() ? CLEANERS_EMPTY : CLEANERS_BUSY;
+  const crew = staff.filter((s) => s.kind === 'cleaner' && !s.leaving);
+  if (crew.length > want) {
+    crew.sort((p, q) => q.slot - p.slot).slice(0, crew.length - want).forEach(staffLeave);
+  } else if (crew.length < want && now >= nextCleanerAt) {
+    const free = CLEANER_LOOKS.findIndex((_, k) => !staff.some((s) => s.kind === 'cleaner' && s.slot === k));
+    if (free >= 0) {
+      addStaff('cleaner', free, CLEANER_LOOKS[free], CLEANER_SPEED);
+      nextCleanerAt = now + 1500;
+    }
+  }
+}
+
+function updateStaff(dt, now) {
+  if (ROOM_COUNT !== staffRooms) {
+    // the rooms were re-laid out: anyone inside a room steps back to the door
+    if (staffRooms >= 0) {
+      for (const s of staff) {
+        if (s.x >= ROOM_W - 2) continue;
+        s.x = DOOR_X; s.y = AISLE_Y; s.path = []; s.next = null; s.mode = 'idle';
+        if (s.leaving) staffLeave(s);
+      }
+    }
+    staffRooms = ROOM_COUNT;
+  }
+
+  const hour = Math.floor(lifeHour());
+  if (waterHour === null) waterHour = hour;
+  else if (hour !== waterHour) { waterHour = hour; callWaterGuy(); }
+  updateCrew(now);
+
+  for (const s of staff) {
+    s.walking = false;
+    if (s.path.length) {
+      const [tx, ty] = s.path[0];
+      const dx = tx - s.x;
+      const dy = ty - s.y;
+      const dist = Math.hypot(dx, dy);
+      const step = s.speed * dt;
+      if (dist <= step) { s.x = tx; s.y = ty; s.path.shift(); }
+      else { s.x += (dx / dist) * step; s.y += (dy / dist) * step; }
+      if (Math.abs(dx) > 0.5) s.dir = dx > 0 ? 1 : -1;
+      s.walking = true;
+      if (!s.path.length && s.next) {
+        s.mode = s.next.mode;
+        s.until = now + s.next.dur;
+        s.next = null;
+        if (s.mode === 'clean' && Math.random() < 0.5) s.say = { text: CLEAN_LINES[Math.floor(Math.random() * CLEAN_LINES.length)], until: now + 2400 };
+        if (s.mode === 'swap') s.say = { text: WATER_LINES[Math.floor(Math.random() * WATER_LINES.length)], until: now + 2400 };
+      }
+      continue;
+    }
+    if (s.mode === 'gone') s.gone = true;
+    else if (s.kind === 'cleaner' && !s.leaving && now > s.until) cleanerPlan(s);
+    else if (s.kind === 'water' && s.mode === 'swap') {
+      if (now > s.until - SWAP_MS / 2) s.jug = 'empty'; // the full gallon is on the cooler, he carries the empty one away
+      if (now > s.until) staffLeave(s);
+    }
+  }
+  for (let i = staff.length - 1; i >= 0; i--) if (staff[i].gone) staff.splice(i, 1);
+}
+
+function drawJug(x, y, full) {
+  r(x, y, 6, 8, full ? '#8fd0f0' : '#dfe6ee');
+  r(x + 1, y - 2, 4, 2, full ? '#6ab0d8' : '#b0b8c4');
+  r(x + 1, y + 1, 1, 5, 'rgba(255,255,255,0.6)');
+}
+
+function lifeDrawStaff(s, t) {
+  drawPerson(s.x, s.y, s.look, s.walking ? 'walk' : 'stand', t, null);
+  const ix = Math.round(s.x);
+  const iy = Math.round(s.y);
+  if (s.kind === 'cleaner') {
+    // a mop: carried upright while walking, swept over the floor while cleaning
+    const cleaning = s.mode === 'clean' && !s.walking;
+    const sweep = cleaning ? Math.round(Math.sin(t / 220) * 4) : 0;
+    r(ix + 6 + sweep / 2, iy - 15, 1, 15, '#d9b27a');
+    r(ix + 4 + sweep, iy - 1, 5, 2, '#cfd6e0');
+    if (cleaning) {
+      for (let k = 0; k < 3; k++) {
+        if (Math.floor(t / 260 + k) % 3 === 0) r(ix + sweep + k * 4 - 2, iy - 3 - (k % 2) * 2, 1, 1, '#ffffff');
+      }
+    }
+  } else if (s.jug) {
+    drawJug(ix - 3, iy - 10, s.jug === 'full');
+    if (s.mode === 'swap') {
+      for (let k = 0; k < 3; k++) { // bubbles rising in the cooler while the new gallon settles
+        const ph = (t / 90 + k * 5) % 12;
+        r(461 + k * 3, 52 - ph, 1, 1, 'rgba(255,255,255,0.85)');
+      }
+    }
+  }
+}
+
 // ---------- per-frame update + overlay ----------
 function lifeUpdate(dt, now) {
   updateChats(now);
   updateParticles(dt);
   updatePet(dt, now);
+  updateStaff(dt, now);
 }
 
 // text drawn in screen space: coffee cup counter, sleeping cat, cat speech
@@ -407,4 +575,7 @@ function lifeOverlay(now, t, sx, sy, font, smallFont) {
     for (let i = 0; i <= k; i++) ctx.fillText(i === 0 ? 'z' : 'Z', sx(pet.x) + (6 + i * 4) * S / 2, sy(pet.y - 8) - i * 8);
   }
   if (pet.say && now < pet.say.until) balloon(pet.say.text, sx(pet.x), sy(pet.y - 11), '#fff6e0', '#5a3a1c', font);
+  for (const s of staff) {
+    if (s.say && now < s.say.until) balloon(s.say.text, sx(s.x), sy(s.y - 17), '#e6fbff', '#14404a', font);
+  }
 }
