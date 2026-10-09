@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Agents Office</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'">
+<style>
+  html, body { margin: 0; background: #1b1a24; font-family: Consolas, "Courier New", monospace; }
+  html { overflow-x: hidden; overflow-y: auto; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #tip {
+    position: fixed; display: none; pointer-events: none; z-index: 20; max-width: 340px;
+    background: rgba(20, 18, 30, 0.96); color: #e8e0f5; border: 1px solid #5a4f78;
+    padding: 6px 8px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+  }
+  #tip b { color: #fff; }
+  #tip .dim { color: #9a92b0; }
+
+  #alerts {
+    position: fixed; left: 10px; bottom: 10px; z-index: 10; cursor: pointer; user-select: none;
+    background: rgba(20, 18, 30, 0.85); color: #e8e0f5; border: 1px solid #5a4f78;
+    padding: 4px 9px; font: 12px Consolas, "Courier New", monospace;
+  }
+  #alerts:hover { background: rgba(58, 51, 71, 0.95); }
+  #alerts.off { color: #9a92b0; }
+
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 330px; z-index: 15; display: none;
+    background: rgba(27, 26, 36, 0.97); color: #e8e0f5; border-left: 2px solid #5a4f78;
+    overflow-y: auto; font-size: 12px; line-height: 1.5; box-sizing: border-box; padding: 12px 14px 20px;
+  }
+  #panel .close { position: absolute; top: 6px; right: 10px; cursor: pointer; font-size: 18px; color: #9a92b0; }
+  #panel .close:hover { color: #fff; }
+  #panel h1 { margin: 0 24px 2px 0; font-size: 20px; color: #fff; }
+  #panel .sub { color: #b9b0d0; margin-bottom: 8px; word-break: break-word; }
+  #panel h2 { margin: 14px 0 4px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #e6c35a; }
+  #panel .chip { display: inline-block; padding: 1px 8px; font-weight: bold; color: #1c1c24; }
+  #panel .chip.working { background: #5fd96a; }
+  #panel .chip.waiting { background: #f2a93b; }
+  #panel .chip.idle { background: #9a92b0; }
+  #panel .row { display: flex; justify-content: space-between; gap: 10px; }
+  #panel .row span:first-child { color: #9a92b0; }
+  #panel .bar { height: 8px; background: #2b2f3a; margin: 4px 0 2px; }
+  #panel .bar i { display: block; height: 100%; }
+  #panel ul { list-style: none; margin: 0; padding: 0; }
+  #panel li { padding: 1px 0; word-break: break-word; }
+  #panel li.done { color: #6fbf7a; }
+  #panel li.doing { color: #7ec8f0; font-weight: bold; }
+  #panel li.todo { color: #b9b0d0; }
+  #panel li .t { color: #7d7596; margin-right: 6px; }
+  #panel .empty { color: #7d7596; font-style: italic; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="tip"></div>
+<div id="alerts" title="Desktop notification and taskbar flash when a terminal needs you"></div>
+<div id="panel"></div>
+<script src="renderer.js"></script>
+<script src="life.js"></script>
+<script src="places.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

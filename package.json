@@ -1,0 +1,32 @@
+{
+  "name": "agents-office",
+  "version": "0.1.0",
+  "description": "A pixel-art office that shows your Claude Code sessions as little people",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "dist": "electron-builder --win dir",
+    "test": "node --test",
+    "hooks": "node scripts/install-hooks.js"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.local.agentsoffice",
+    "productName": "AgentsOffice",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "dir",
+      "signAndEditExecutable": false
+    }
+  }
+}
